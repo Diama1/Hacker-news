@@ -1,20 +1,34 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, text, div, h1, img)
+import Html exposing (..)
 import Html.Attributes exposing (src)
+import RemoteData exposing (RemoteData, WebData)
 
 
 ---- MODEL ----
 
+type alias AllNews =
+    { id : Int
+    , by : String
+    , score : Maybe Int
+    , title : String
+    }
+type News
+    = Loading
+    | GetNews ( WebData (List AllNews))
+
 
 type alias Model =
-    {}
+    { hackerNews : News }
 
+emptyModel : Model
+emptyModel =
+    { hackerNews = Loading }
 
 init : ( Model, Cmd Msg )
 init =
-    ( {}, Cmd.none )
+    ( emptyModel, Cmd.none )
 
 
 
@@ -37,8 +51,7 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div []
-        [ img [ src "/logo.svg" ] []
-        , h1 [] [ text "Your Elm App is working!" ]
+        [ h1 [] [ text "Hacker News" ]
         ]
 
 
