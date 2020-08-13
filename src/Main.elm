@@ -2,29 +2,30 @@ module Main exposing (..)
 
 import Browser
 import Html exposing (..)
-import Html.Attributes exposing (src)
+import Html.Attributes exposing ( href, class )
+import Html.Events exposing (..)
+import Http
 import RemoteData exposing (RemoteData, WebData)
+import Json.Decode as Decode exposing (Decoder, int, list, string)
+import Json.Decode.Pipeline exposing (required)
 
 
 ---- MODEL ----
 
-type alias AllNews =
-    { id : Int
-    , by : String
-    , score : Maybe Int
-    , title : String
+type alias News =
+    { by : String
+     , id : Int
+     , score : Int
+     , title : String
     }
-type News
-    = Loading
-    | GetNews ( WebData (List AllNews))
 
 
 type alias Model =
-    { hackerNews : News }
+    { hackerNews : WebData (List News) }
 
 emptyModel : Model
 emptyModel =
-    { hackerNews = Loading }
+    { hackerNews = RemoteData.NotAsked }
 
 init : ( Model, Cmd Msg )
 init =
@@ -36,13 +37,34 @@ init =
 
 
 type Msg
-    = NoOp
+    = SendHttpRequest
+    | DataReceived (WebData (List News))
 
+dataDecoder: Decoder News
+dataDecoder =
+    Decode.succeed News
+        |> required "by" string
+        |> required "id" int
+        |> required "score" int
+        |> required "title" string
+
+httpCmd : Cmd Msg
+httpCmd =
+    Http.get
+        {url = "https://hacker-news.firebaseio.com/v0/topstories.json"
+         , expect =
+                list dataDecoder
+                    |> Http.expectJson (RemoteData.fromResult >> DataReceived)
+                }
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( model, Cmd.none )
+    case msg of
+        SendHttpRequest ->
+            ({ model | hackerNews = RemoteData.Loading }, httpCmd )
 
+        DataReceived news ->
+            ( { model | hackerNews = news }, Cmd.none )
 
 
 ---- VIEW ----
@@ -50,11 +72,70 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
+    div [ class "container" ]
+            [ button [ onClick SendHttpRequest ]
+                [ text "Get the news" ]
+            , viewNews model
+            ]
+
+
+viewNews : Model -> Html Msg
+viewNews model =
+    case model.hackerNews of
+        RemoteData.NotAsked ->
+            text ""
+        RemoteData.Loading ->
+            text "Loading..."
+        RemoteData.Success hackerNews ->
+            viewNewsPost hackerNews
+        RemoteData.Failure error ->
+            viewError (errorMessage error )
+
+viewNewsPost : List News -> Html Msg
+viewNewsPost newsList =
+    div [ ]
+            [ ul []
+                ( List.map viewNewsList newsList )
+            ]
+viewNewsList : News -> Html Msg
+viewNewsList model =
+    li []
+     [ a [ href model.title ]
+         [ text model.by ]
+
+         , h6 [] [ text " In ", text (String.fromInt model.score), text  ", Released Date: ", text ( String.fromInt model.id)
+          ]
+
+      ]
+viewError : String -> Html Msg
+viewError error =
+    let
+        errorHeading =
+            "Couldn't fetch data at this time."
+
+    in
     div []
-        [ h1 [] [ text "Hacker News" ]
+        [ h3 [] [ text errorHeading ]
+        , text ("Error: " ++ error)
         ]
 
+errorMessage : Http.Error -> String
+errorMessage error =
+    case error of
+        Http.BadUrl message ->
+            message
 
+        Http.Timeout ->
+            "Server is taking too long to respond. Please try again later."
+
+        Http.NetworkError ->
+            "Unable to reach server."
+
+        Http.BadStatus statusCode ->
+            "Request failed with status code: " ++ String.fromInt statusCode
+
+        Http.BadBody message ->
+            message
 
 ---- PROGRAM ----
 
