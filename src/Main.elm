@@ -2,30 +2,30 @@ module Main exposing (..)
 
 import Browser
 import Html exposing (..)
-import Html.Attributes exposing ( href, class )
+import Html.Attributes exposing (class, href)
 import Html.Events exposing (..)
 import Http
-import RemoteData exposing (RemoteData, WebData)
 import Json.Decode as Decode exposing (Decoder, int, list, string)
 import Json.Decode.Pipeline exposing (required)
+import RemoteData exposing (RemoteData, WebData)
+
 
 
 ---- MODEL ----
 
+
 type alias News =
-    { by : String
-     , id : Int
-     , score : Int
-     , title : String
-    }
+    { id : Int }
 
 
 type alias Model =
     { hackerNews : WebData (List News) }
 
+
 emptyModel : Model
 emptyModel =
-    { hackerNews = RemoteData.NotAsked }
+    { hackerNews = RemoteData.Loading }
+
 
 init : ( Model, Cmd Msg )
 init =
@@ -37,34 +37,36 @@ init =
 
 
 type Msg
-    = SendHttpRequest
-    | DataReceived (WebData (List News))
+    = DataReceived (WebData (List News))
 
-dataDecoder: Decoder News
+
+
+--dataDecoder: Int -> Decoder News
+--dataDecoder =
+
+
+dataDecoder : Decoder News
 dataDecoder =
     Decode.succeed News
-        |> required "by" string
         |> required "id" int
-        |> required "score" int
-        |> required "title" string
+
 
 httpCmd : Cmd Msg
 httpCmd =
     Http.get
-        {url = "https://hacker-news.firebaseio.com/v0/topstories.json"
-         , expect =
-                list dataDecoder
-                    |> Http.expectJson (RemoteData.fromResult >> DataReceived)
-                }
+        { url = "https://hacker-news.firebaseio.com/v0/topstories.json?print=pretty"
+        , expect =
+            list dataDecoder
+                |> Http.expectJson (RemoteData.fromResult >> DataReceived)
+        }
+
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        SendHttpRequest ->
-            ({ model | hackerNews = RemoteData.Loading }, httpCmd )
-
         DataReceived news ->
             ( { model | hackerNews = news }, Cmd.none )
+
 
 
 ---- VIEW ----
@@ -73,51 +75,54 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div [ class "container" ]
-            [ button [ onClick SendHttpRequest ]
-                [ text "Get the news" ]
-            , viewNews model
-            ]
+        [ viewNews model
+        ]
 
 
 viewNews : Model -> Html Msg
 viewNews model =
     case model.hackerNews of
         RemoteData.NotAsked ->
-            text ""
+            div [] [ text "Initializing" ]
+
         RemoteData.Loading ->
-            text "Loading..."
+            div [] [ text "Loading" ]
+
         RemoteData.Success hackerNews ->
             viewNewsPost hackerNews
+
         RemoteData.Failure error ->
-            viewError (errorMessage error )
+            viewError (errorMessage error)
+
 
 viewNewsPost : List News -> Html Msg
 viewNewsPost newsList =
-    div [ ]
-            [ ul []
-                ( List.map viewNewsList newsList )
-            ]
+    div []
+        [ ul []
+            (List.map viewNewsList newsList)
+        ]
+
+
 viewNewsList : News -> Html Msg
 viewNewsList model =
     li []
-     [ a [ href model.title ]
-         [ text model.by ]
+        [ a []
+            [ text (String.fromInt model.id)
+            ]
+        ]
 
-         , h6 [] [ text " In ", text (String.fromInt model.score), text  ", Released Date: ", text ( String.fromInt model.id)
-          ]
 
-      ]
 viewError : String -> Html Msg
 viewError error =
     let
         errorHeading =
             "Couldn't fetch data at this time."
-
     in
     div []
         [ h3 [] [ text errorHeading ]
         , text ("Error: " ++ error)
         ]
+
 
 errorMessage : Http.Error -> String
 errorMessage error =
@@ -137,6 +142,8 @@ errorMessage error =
         Http.BadBody message ->
             message
 
+
+
 ---- PROGRAM ----
 
 
@@ -144,7 +151,7 @@ main : Program () Model Msg
 main =
     Browser.element
         { view = view
-        , init = \_ -> init
+        , init = \_ -> ( emptyModel, httpCmd )
         , update = update
         , subscriptions = always Sub.none
         }
