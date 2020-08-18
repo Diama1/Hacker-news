@@ -5,7 +5,7 @@ import Html exposing (..)
 import Html.Attributes exposing (class, href)
 import Html.Events exposing (..)
 import Http
-import Json.Decode as Decode exposing (Decoder, int, list, string)
+import Json.Decode as Decode exposing (Decoder, andThen, int, list, string, succeed)
 import Json.Decode.Pipeline exposing (required)
 import RemoteData exposing (RemoteData, WebData)
 
@@ -40,15 +40,9 @@ type Msg
     = DataReceived (WebData (List News))
 
 
-
---dataDecoder: Int -> Decoder News
---dataDecoder =
-
-
 dataDecoder : Decoder News
 dataDecoder =
-    Decode.succeed News
-        |> required "id" int
+    int |> andThen (\id_ -> succeed (News id_))
 
 
 httpCmd : Cmd Msg
