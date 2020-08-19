@@ -5,7 +5,7 @@ import Html exposing (..)
 import Html.Attributes exposing (class, href)
 import Html.Events exposing (..)
 import Http
-import Json.Decode as Decode exposing (Decoder, andThen, int, list, string, succeed)
+import Json.Decode as Decode exposing (Decoder, andThen, int, list, string, succeed, field)
 import Json.Decode.Pipeline exposing (required)
 import RemoteData exposing (RemoteData, WebData)
 
@@ -14,17 +14,30 @@ import RemoteData exposing (RemoteData, WebData)
 ---- MODEL ----
 
 
-type alias News =
+type alias Ids =
     { id : Int }
 
+type alias Story =
+    { by : String
+    , descendants : Int
+    , id : Int
+    , kids : List Int
+    , score : Int
+    , time : Int
+    , title : String
+    , url : String
+    }
 
 type alias Model =
-    { hackerNews : WebData (List News) }
+    { hackerNews : WebData (List Story)
+     , storyIds : WebData ( List Ids )
+     }
 
 
 emptyModel : Model
 emptyModel =
-    { hackerNews = RemoteData.Loading }
+    { hackerNews = RemoteData.Loading,
+     storyIds = RemoteData.Loading }
 
 
 init : ( Model, Cmd Msg )
@@ -37,28 +50,54 @@ init =
 
 
 type Msg
-    = DataReceived (WebData (List News))
+    = StoryIds (WebData (List Ids))
+    | TopStory ( WebData ( List Story ) )
 
 
-dataDecoder : Decoder News
+idDecoder : Decoder Ids
+idDecoder =
+    int |> andThen (\id_ -> succeed (Ids id_))
+
+dataDecoder : Decoder Story
 dataDecoder =
-    int |> andThen (\id_ -> succeed (News id_))
+    Decode.map8 Story
+        (field "by" Decode.string)
+        (field "descendants" Decode.int)
+        (field "id" Decode.int)
+        (field "kids" (Decode.list Decode.int))
+        (field "score" Decode.int)
+        (field "time" Decode.int)
+        (field "title" Decode.string)
+        (field "url" Decode.string)
 
 
-httpCmd : Cmd Msg
-httpCmd =
+httpCmd : Int -> Cmd Msg
+httpCmd id =
+    Http.get
+        { url = "https://hacker-news.firebaseio.com/v0/item/" ++ ( String.fromInt id ) ++ ".json"
+
+        , expect =
+            list dataDecoder
+                |> Http.expectJson (RemoteData.fromResult >> TopStory)
+        }
+
+itemId : Cmd Msg
+itemId =
     Http.get
         { url = "https://hacker-news.firebaseio.com/v0/topstories.json?print=pretty"
         , expect =
-            list dataDecoder
-                |> Http.expectJson (RemoteData.fromResult >> DataReceived)
+            list idDecoder
+                |> Http.expectJson (RemoteData.fromResult >> StoryIds)
         }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        DataReceived news ->
+        StoryIds id ->
+            ( {model | storyIds = id}, Cmd.none )
+
+        TopStory news ->
             ( { model | hackerNews = news }, Cmd.none )
 
 
@@ -75,7 +114,7 @@ view model =
 
 viewNews : Model -> Html Msg
 viewNews model =
-    case model.hackerNews of
+    case model.storyIds of
         RemoteData.NotAsked ->
             div [] [ text "Initializing" ]
 
@@ -89,7 +128,7 @@ viewNews model =
             viewError (errorMessage error)
 
 
-viewNewsPost : List News -> Html Msg
+viewNewsPost : List Ids -> Html Msg
 viewNewsPost newsList =
     div []
         [ ul []
@@ -97,7 +136,7 @@ viewNewsPost newsList =
         ]
 
 
-viewNewsList : News -> Html Msg
+viewNewsList : Ids -> Html Msg
 viewNewsList model =
     li []
         [ a []
