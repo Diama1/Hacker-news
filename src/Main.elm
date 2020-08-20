@@ -18,15 +18,20 @@ import RemoteData exposing (RemoteData, WebData)
 type alias StoryId =
   Int
 
-
+type alias Story =
+    { title: String
+    , url: String
+    }
 type alias Model =
-    { stories : WebData (List StoryId)
+    { stories : WebData (List Story)
+    , storyIds : WebData ( List StoryId)
     }
 
 
 emptyModel : Model
 emptyModel =
     { stories = RemoteData.Loading
+    ,storyIds = RemoteData.Loading
     }
 
 
@@ -41,39 +46,45 @@ init =
 
 type Msg
     = HandleFetchedStoryIds (WebData (List StoryId))
+    | HandleFetchedStory ( WebData (List Story))
+
+newsDecoder : Decoder Story
+newsDecoder =
+    Decode.succeed Story
+        |> required "title" string
+        |> required "url" string
 
 
-getStoryApi : Int -> Cmd Msg
-getStoryApi id =
+getStory : Int -> Cmd Msg
+getStory id =
     Http.get
         { url = "https://hacker-news.firebaseio.com/v0/item/" ++ ( String.fromInt id ) ++ ".json"
 
         , expect =
-            list int
-                |> Http.expectJson (RemoteData.fromResult >> HandleFetchedStoryIds )
+            list newsDecoder
+                |> Http.expectJson ( RemoteData.fromResult >> HandleFetchedStory )
         }
 
-
-itemId : Cmd Msg
-itemId =
+getStoryId : Cmd Msg
+getStoryId =
     Http.get
         { url = "https://hacker-news.firebaseio.com/v0/topstories.json"
         , expect =
             list int
-                |> Http.expectJson (RemoteData.fromResult >> HandleFetchedStoryIds)
+                |> Http.expectJson (RemoteData.fromResult >>  HandleFetchedStoryIds  )
         }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        HandleFetchedStoryIds news ->
+        HandleFetchedStoryIds id ->
             let
-                _= Debug.log "hello" news
+                _= Debug.log "hello" id
             in
-            ( { model | stories = news }, Cmd.none )
-
-
+            ( { model | storyIds = id }, Cmd.none )
+        HandleFetchedStory news ->
+            ( { model | stories = news }, getStoryId )
 
 ---- VIEW ----
 
@@ -83,7 +94,6 @@ view model =
     div [ class "container" ]
         [ viewNews model
         ]
-
 
 
 viewNews : Model -> Html Msg
@@ -102,7 +112,7 @@ viewNews model =
             viewError (errorMessage error)
 
 
-viewNewsPost : List StoryId -> Html Msg
+viewNewsPost : List Story -> Html Msg
 viewNewsPost newsList =
     div []
         [ ul []
@@ -110,11 +120,11 @@ viewNewsPost newsList =
         ]
 
 
-viewNewsList : StoryId -> Html Msg
+viewNewsList : Story -> Html Msg
 viewNewsList model =
     li []
         [ a []
-            [ text (String.fromInt model.id)
+            [ text  (model.title)
             ]
         ]
 
@@ -158,7 +168,7 @@ main : Program () Model Msg
 main =
     Browser.element
         { view = view
-        , init = \_ -> ( emptyModel, itemId )
+        , init = \_ -> ( emptyModel, getStoryId )
         , update = update
         , subscriptions = always Sub.none
         }
