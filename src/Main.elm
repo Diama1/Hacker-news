@@ -8,8 +8,7 @@ import Http
 import Json.Decode as Decode exposing (Decoder, andThen, field, int, list, string, succeed)
 import Json.Decode.Pipeline exposing (required)
 import RemoteData exposing (RemoteData, WebData)
-
-
+import Debug exposing (log)
 
 
 ---- MODEL ----
@@ -55,10 +54,13 @@ newsDecoder =
         |> required "url" string
 
 
+
+
+
 getStory : Int -> Cmd Msg
 getStory id =
     Http.get
-        { url = "https://hacker-news.firebaseio.com/v0/item/" ++ ( String.fromInt id ) ++ ".json"
+        { url = "https://hacker-news.firebaseio.com/v0/item/" ++ ( String.fromInt id) ++ ".json"
 
         , expect =
             list newsDecoder
@@ -72,17 +74,26 @@ getStoryId =
         , expect =
             list int
                 |> Http.expectJson (RemoteData.fromResult >>  HandleFetchedStoryIds  )
+
         }
+
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        HandleFetchedStoryIds id ->
+        HandleFetchedStoryIds webdata ->
             let
-                _= Debug.log "hello" id
+                idList =
+                    case webdata of
+                        RemoteData.Success list ->
+                            list
+                        _ ->
+                            [ ]
+                _ = Debug.log "list" idList
+
             in
-            ( { model | storyIds = id }, Cmd.none )
+            ( { model | storyIds = webdata }, Cmd.none )
         HandleFetchedStory news ->
             ( { model | stories = news }, getStoryId )
 
@@ -98,7 +109,7 @@ view model =
 
 viewNews : Model -> Html Msg
 viewNews model =
-    case model.stories of
+    case model.storyIds of
         RemoteData.NotAsked ->
             div [] [ text "Initializing" ]
 
@@ -112,7 +123,7 @@ viewNews model =
             viewError (errorMessage error)
 
 
-viewNewsPost : List Story -> Html Msg
+viewNewsPost : List StoryId -> Html Msg
 viewNewsPost newsList =
     div []
         [ ul []
@@ -120,11 +131,11 @@ viewNewsPost newsList =
         ]
 
 
-viewNewsList : Story -> Html Msg
+viewNewsList : StoryId -> Html Msg
 viewNewsList model =
     li []
         [ a []
-            [ text  (model.title)
+            [ text  (String.fromInt model)
             ]
         ]
 
